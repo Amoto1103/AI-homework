@@ -1,0 +1,30 @@
+import numpy as np
+import cv2
+
+filein = input()
+im=cv2.imread(filein,0)
+    #二值化
+    #im1=im
+    #cv2.threshold(im, 200, 255, cv2.THRESH_BINARY_INV, im1)
+    #中值滤波，效果不错，感觉滤的有点过
+    #out=cv2.medianBlur(im,3,0)
+    #去除边框
+height,weight=im.shape
+print(weight,height)
+for i in range(height):
+    for j in range(weight):
+        if i < 1 or i > (height-2) or j < 1 or j >(weight-2):
+            im[i,j]=255
+    #先白色膨涨，有降噪效果，就是降得有点狠了
+kernel=cv2.getStructuringElement(cv2.MORPH_RECT,(2,2))
+dilation=cv2.dilate(im,kernel)
+
+    #再白色腐蚀，也没好看到哪里
+newkernel=cv2.getStructuringElement(cv2.MORPH_RECT,(3,2))
+eroded=cv2.erode(dilation,newkernel)
+
+final=eroded
+cv2.threshold(eroded, 245, 255, cv2.THRESH_BINARY, final)
+    #new=cv2.resize(final,(1320,500))
+cv2.imwrite("333.jpg",final)
+

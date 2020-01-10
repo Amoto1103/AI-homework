@@ -1,0 +1,67 @@
+import os
+import csv
+import torch
+from torch.autograd import Variable
+import utils
+import dataset
+import cv2
+from PIL import Image
+
+import models.crnn as crnn
+
+def preprocess(filein):
+    im=cv2.imread(filein,0)
+    height,weight=im.shape
+    for i in range(height):
+        for j in range(weight):
+            if i < 1 or i > (height-2) or j < 1 or j >(weight-2):
+                im[i,j]=255
+    kernel=cv2.getStructuringElement(cv2.MORPH_RECT,(2,2))
+    dilation=cv2.dilate(im,kernel)
+    newkernel=cv2.getStructuringElement(cv2.MORPH_RECT,(3,2))
+    eroded=cv2.erode(dilation,newkernel)
+    final=eroded
+    cv2.threshold(eroded, 245, 255, cv2.THRESH_BINARY, final)
+    cv2.imwrite(filein,final)
+
+model_path = './data/crnn.pth'
+alphabet = '012345678946066796176100049157000462'
+
+with open('result.csv','w',newline='') as result:
+    res = csv.writer(result)
+    res.writerow(['name','code'])
+
+model = crnn.CRNN(32, 1, 37, 256)
+if torch.cuda.is_available():
+    model = model.cuda()
+print('loading pretrained model from %s' % model_path)
+model.load_state_dict(torch.load(model_path))
+
+converter = utils.strLabelConverter(alphabet)
+
+transformer = dataset.resizeNormalize((100, 32))
+
+
+path = input("Enter the path:")
+for i in os.listdir(path):
+    img_path = path+'/'+i
+    image = preprocess(img_path)
+    image = Image.open(img_path).convert('L')
+    image = transformer(image)
+    if torch.cuda.is_available():
+        image = image.cuda()
+    image = image.view(1, *image.size())
+    image = Variable(image)
+
+    model.eval()
+    preds = model(image)
+
+    _, preds = preds.max(2)
+    preds = preds.transpose(1, 0).contiguous().view(-1)
+
+    preds_size = Variable(torch.IntTensor([preds.size(0)]))
+    sim_pred = converter.decode(preds.data, preds_size.data, raw=False)
+    record = [i,sim_pred]
+    with open('result.csv','a+',newline='') as result:
+        res = csv.writer(result)
+        res.writerow(record)
